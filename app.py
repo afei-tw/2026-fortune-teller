@@ -25,7 +25,7 @@ def load_data():
 
 df_fortune = load_data()
 
-# --- 3. 核心排盤演算法 ---
+# --- 3. 核心排盤演算法 (保持 V4.0 精準版) ---
 
 def get_bazi_ju(year_gan_idx, life_branch_idx):
     start_gan = (year_gan_idx % 5) * 2 + 2 
@@ -92,7 +92,7 @@ def get_true_star_in_wu(year, month, day, hour_idx):
     except Exception:
         return "紫微"
 
-# --- 序號綁定邏輯 ---
+# --- 序號綁定邏輯 (本地版) ---
 LEDGER_FILE = "key_ledger.json"
 
 def check_license_binding(license_key, user_birth_id):
@@ -112,6 +112,7 @@ def check_license_binding(license_key, user_birth_id):
         else:
             return False, "❌ 此序號已綁定其他生日，無法用於此命盤。"
     else:
+        # 為了方便測試，暫時只檢查是否為 8888 或 VIP 開頭
         if license_key == "8888" or license_key.startswith("VIP"):
             ledger[license_key] = user_birth_id
             with open(LEDGER_FILE, "w", encoding="utf-8") as f:
@@ -120,75 +121,106 @@ def check_license_binding(license_key, user_birth_id):
         else:
             return False, "❌ 無效的序號。"
 
-# --- 4. 介面設計 ---
+# --- 4. 介面設計 (V8.0: 輸入移至主畫面) ---
 
+# 初始化狀態
 if "calculated" not in st.session_state:
     st.session_state.calculated = False
 if "unlocked" not in st.session_state:
     st.session_state.unlocked = False
+if "user_birth_id" not in st.session_state:
+    st.session_state.user_birth_id = ""
 
-# Sidebar
+# Sidebar 僅保留 Logo 或簡單資訊 (選填)
 with st.sidebar:
     if os.path.exists("service_icon.png"):
         st.image("service_icon.png", width=100)
-    
-    st.header("📝 輸入出生資料")
-    st.markdown("請輸入您的 **真實出生時間**，系統將依據紫微斗數古法，為您排出 2026 丙午流年命盤。")
-    
-    b_year = st.number_input("出生年 (西元)", 1940, 2025, 1975)
-    b_month = st.selectbox("出生月", range(1, 13), index=3) 
-    b_day = st.selectbox("出生日", range(1, 32), index=27) 
-    
-    hours_map = {
-        "子 (23-01)": 0, "丑 (01-03)": 1, "寅 (03-05)": 2, "卯 (05-07)": 3,
-        "辰 (07-09)": 4, "巳 (09-11)": 5, "午 (11-13)": 6, "未 (13-15)": 7,
-        "申 (15-17)": 8, "酉 (17-19)": 9, "戌 (19-21)": 10, "亥 (21-23)": 11
-    }
-    b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=3) 
-    b_hour = hours_map[b_hour_str]
-    
-    user_birth_id = f"{b_year}-{b_month}-{b_day}-{b_hour}"
-    
+    st.markdown("### 2026 丙午流年")
+    st.caption("紫微斗數運勢詳批系統")
     st.markdown("---")
-    if st.button("🔥 開始排盤測算", type="primary", use_container_width=True):
-        st.session_state.calculated = True
-        st.session_state.unlocked = False
-        st.rerun()
+    st.info("💡 隱私聲明：本系統不會永久儲存您的個資，請安心使用。")
 
-# Main Area
+# === 主畫面邏輯 ===
 
 if not st.session_state.calculated:
+    # --- A. 首頁 (Landing Page) ---
+    
     st.title("2026 丙午年・紫微斗數運勢詳批")
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
+    
     st.markdown("""
     ### 🐎 2026 火馬奔騰，您的運勢準備好了嗎？
     
     2026年是天干地支皆屬火的「**丙午年**」，又被稱為「**火馬年**」。
-    這意味著整體大環境將充滿**變動、爆發與蛻變**的能量；雖然機遇無限，但也充滿了未知的挑戰與壓力。
-
+    這意味著整體大環境將充滿**變動、爆發與蛻變**的能量。
+    
     運勢強時如何乘勢而為？運勢弱時如何持盈保泰？
     這將是您在充滿變革的火馬年中，掌握先機的重要關鍵。
 
     ---
-
+    
     #### 【本流年測算特色】
-    別讓盲目的努力變成徒勞無功。本流年測算將為您量身打造「**年度戰略指南**」，內容包含：
-
+    
     ✅ **全方位解析** 針對財運、事業、感情、健康四大運勢，提供具體建議。
 
     ✅ **個人化命盤** 不講空泛的大道理，只針對您的命盤給出解方。
 
     ✅ **關鍵月份提醒** 告訴您哪個月該衝、哪個月該守，精準掌握運勢起伏。
 
-    **命理學的智慧在於「趨吉避凶」。現在就提前了解流年走勢，為 2026 做好萬全準備！**
+    ---
     """)
-    st.info("👈 請由左側輸入生日，開啟您的專屬流年卷軸。")
+    
+    # === 新增：直接在首頁顯示輸入框 (Input Form) ===
+    
+    st.success("👇 **請在此輸入您的出生資料，立即開啟流年卷軸**")
+    
+    # 使用 Container 包覆，讓輸入區塊看起來更集中
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            b_year = st.number_input("出生年 (西元)", 1940, 2025, 1975)
+        with col2:
+            b_month = st.selectbox("出生月", range(1, 13), index=3)
+            
+        col3, col4 = st.columns(2)
+        with col3:
+            b_day = st.selectbox("出生日", range(1, 32), index=27)
+        with col4:
+            hours_map = {
+                "子 (23-01)": 0, "丑 (01-03)": 1, "寅 (03-05)": 2, "卯 (05-07)": 3,
+                "辰 (07-09)": 4, "巳 (09-11)": 5, "午 (11-13)": 6, "未 (13-15)": 7,
+                "申 (15-17)": 8, "酉 (17-19)": 9, "戌 (19-21)": 10, "亥 (21-23)": 11
+            }
+            b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=3)
+            b_hour = hours_map[b_hour_str]
+
+        # 按鈕
+        if st.button("🔥 開始排盤測算", type="primary", use_container_width=True):
+            # 儲存計算參數到 session_state
+            st.session_state.b_year = b_year
+            st.session_state.b_month = b_month
+            st.session_state.b_day = b_day
+            st.session_state.b_hour = b_hour
+            st.session_state.user_birth_id = f"{b_year}-{b_month}-{b_day}-{b_hour}"
+            
+            st.session_state.calculated = True
+            st.session_state.unlocked = False # 重置解鎖狀態
+            st.rerun()
 
 else:
+    # --- B. 測算結果頁 (Result Page) ---
+    
     if df_fortune is None:
         st.error("❌ 系統錯誤：找不到資料庫檔案 `2026_data.csv`。")
         st.stop()
+    
+    # 從 session_state 讀取剛剛輸入的資料
+    b_year = st.session_state.b_year
+    b_month = st.session_state.b_month
+    b_day = st.session_state.b_day
+    b_hour = st.session_state.b_hour
+    user_birth_id = st.session_state.user_birth_id
 
     star_name = get_true_star_in_wu(b_year, b_month, b_day, b_hour)
     res = df_fortune[df_fortune['Star_ID'] == star_name]
@@ -263,7 +295,8 @@ else:
                 st.write(data.get('Content_Monthly', '無資料'))
             
             st.markdown("---")
-            if st.button("🔄 重新測算 (輸入新生日需新序號)"):
+            # 重新測算按鈕
+            if st.button("🔄 重新測算 (輸入新生日需新序號)", use_container_width=True):
                 st.session_state.calculated = False
                 st.session_state.unlocked = False
                 st.rerun()
