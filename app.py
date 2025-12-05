@@ -5,7 +5,6 @@ import os
 import json
 
 # --- 1. 頁面設定 ---
-# 這裡 layout="centered" 會讓內容居中，適合閱讀
 st.set_page_config(
     page_title="2026 丙午年・紫微斗數運勢詳批", 
     page_icon="🔮", 
@@ -26,7 +25,7 @@ def load_data():
 
 df_fortune = load_data()
 
-# --- 3. 核心排盤演算法 (保持 V4.0 精準版) ---
+# --- 3. 核心排盤演算法 ---
 
 def get_bazi_ju(year_gan_idx, life_branch_idx):
     start_gan = (year_gan_idx % 5) * 2 + 2 
@@ -121,7 +120,19 @@ def check_license_binding(license_key, user_birth_id):
         else:
             return False, "❌ 無效的序號。"
 
-# --- 4. 介面設計 (V9.0 全螢幕版) ---
+# --- [新增] 頁尾顯示函數 ---
+def show_footer():
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style="text-align: center; color: #888888; font-size: 0.8em; padding: 10px;">
+            🔒 隱私聲明：本系統不會永久儲存您的個資，請安心使用。
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# --- 4. 介面設計 ---
 
 if "calculated" not in st.session_state:
     st.session_state.calculated = False
@@ -130,14 +141,10 @@ if "unlocked" not in st.session_state:
 if "user_birth_id" not in st.session_state:
     st.session_state.user_birth_id = ""
 
-# ⚠️ 注意：此處已移除 st.sidebar 區塊，讓畫面更乾淨
-
 # === 主畫面邏輯 ===
 
 if not st.session_state.calculated:
     # --- A. 首頁 (Landing Page) ---
-    
-    # 標題與 Banner
     st.title("2026 丙午年・紫微斗數運勢詳批")
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
@@ -164,7 +171,6 @@ if not st.session_state.calculated:
     ---
     """)
     
-    # 輸入表單
     st.success("👇 **請在此輸入您的出生資料，立即開啟流年卷軸**")
     
     with st.container(border=True):
@@ -195,6 +201,9 @@ if not st.session_state.calculated:
             st.session_state.calculated = True
             st.session_state.unlocked = False 
             st.rerun()
+    
+    # 呼叫頁尾 (首頁)
+    show_footer()
 
 else:
     # --- B. 測算結果頁 (Result Page) ---
@@ -284,4 +293,10 @@ else:
             st.markdown("---")
             if st.button("🔄 重新測算 (輸入新生日需新序號)", use_container_width=True):
                 st.session_state.calculated = False
-                st.session_state.unlocked
+                st.session_state.unlocked = False
+                st.rerun()
+                
+        # 呼叫頁尾 (結果頁)
+        show_footer()
+    else:
+        st.error(f"資料庫中找不到【{star_name}】的資料。")
