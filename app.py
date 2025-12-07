@@ -119,14 +119,21 @@ def check_license_binding(license_key, user_birth_id):
         else:
             return False, "❌ 無效的序號。"
 
-# --- 文字排版優化函數 ---
+# --- 文字排版優化函數 (關鍵修改) ---
 def format_text(text):
     if pd.isna(text):
         return "（此欄位無資料）"
+    
     text = str(text)
-    # 自動換行邏輯
+    
+    # 1. 處理 Excel 的 Alt+Enter 換行
+    # 在 Markdown 中，單純的 \n 常常被視為空白，要 \n\n 才會真的換段落
+    text = text.replace("\n", "\n\n")
+    
+    # 2. 處理打勾符號的條列式
     if "✓" in text:
         text = text.replace("✓", "\n\n✓ ")
+        
     return text
 
 # --- 頁尾 ---
@@ -187,18 +194,18 @@ if not st.session_state.calculated:
         with col1:
             b_year = st.number_input("出生年 (西元)", 1940, 2025, 1990)
         with col2:
-            b_month = st.selectbox("出生月", range(1, 13), index=5) # 預設6月
+            b_month = st.selectbox("出生月", range(1, 13), index=5)
             
         col3, col4 = st.columns(2)
         with col3:
-            b_day = st.selectbox("出生日", range(1, 32), index=14) # 預設15日
+            b_day = st.selectbox("出生日", range(1, 32), index=14)
         with col4:
             hours_map = {
                 "子 (23-01)": 0, "丑 (01-03)": 1, "寅 (03-05)": 2, "卯 (05-07)": 3,
                 "辰 (07-09)": 4, "巳 (09-11)": 5, "午 (11-13)": 6, "未 (13-15)": 7,
                 "申 (15-17)": 8, "酉 (17-19)": 9, "戌 (19-21)": 10, "亥 (21-23)": 11
             }
-            b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=6) # 預設午時
+            b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=6)
             b_hour = hours_map[b_hour_str]
 
         if st.button("🔥 開始排盤測算", type="primary", use_container_width=True):
@@ -250,7 +257,7 @@ else:
             
         st.divider()
         st.subheader(f"📜 {data['Title']}")
-        # 修正：將 st.write 改為 st.markdown 以強制渲染粗體
+        # 修正：改用 st.markdown 強制渲染 Markdown 語法 (粗體、變色)
         st.markdown(format_text(data['Content_General']))
         st.divider()
         
@@ -283,7 +290,7 @@ else:
             
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情運", "💼 事業運", "💰 財運", "🏥 健康運", "📅 流月運勢"])
             
-            # 修正：所有分頁的內容也都改用 st.markdown
+            # 以下全部改用 st.markdown，並確保 format_text 有處理換行
             with tab1:
                 st.markdown("### 感情與人際")
                 st.markdown(format_text(data.get('Content_Love')))
