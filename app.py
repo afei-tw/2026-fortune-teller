@@ -29,7 +29,7 @@ def load_data():
 
 df_fortune = load_data()
 
-# --- 3. 核心排盤演算法 (已移除 try-except 以避免縮排錯誤) ---
+# --- 3. 核心排盤演算法 ---
 
 def get_bazi_ju(year_gan_idx, life_branch_idx):
     start_gan = (year_gan_idx % 5) * 2 + 2 
@@ -58,7 +58,6 @@ def get_ziwei_pos(lunar_day, ju):
     return pos
 
 def get_true_star_in_wu(year, month, day, hour_idx):
-    # 這裡移除了 try...except，直接執行邏輯，避免 SyntaxError
     solar = Solar.fromYmdHms(year, month, day, 0, 0, 0)
     lunar = solar.getLunar()
     l_month = lunar.getMonth()
@@ -100,7 +99,6 @@ def get_true_star_in_wu(year, month, day, hour_idx):
 # --- 4. Google Sheets 連線 ---
 
 def get_google_sheet_connection():
-    # 使用垂直列表定義 scope，防止複製時出錯
     scope = [
         'https://spreadsheets.google.com/feeds',
         'https://www.googleapis.com/auth/drive'
@@ -110,7 +108,6 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
         key_dict = dict(st.secrets["gcp_service_account"])
-        # 自動修復 Private Key
         if "private_key" in key_dict:
             pk = key_dict["private_key"]
             pk = pk.replace("\\n", "\n")
@@ -123,4 +120,76 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         
     client = gspread.authorize(creds)
-    return client.open("2026_Ledger
+    # 這裡拆成兩行寫，避免斷行錯誤
+    spreadsheet = client.open("2026_Ledger")
+    return spreadsheet.sheet1
+
+def check_license_binding_cloud(license_key, user_birth_id):
+    try:
+        sheet = get_google_sheet_connection()
+        records = sheet.get_all_records()
+        
+        # === 診斷資訊 (讀取成功會顯示) ===
+        if len(records) > 0:
+            st.info("💡 系統診斷：資料庫連線成功！")
+        # =============================
+        
+        ledger = {}
+        for row in records:
+            k = str(row.get('license_key', row.get('License_Key', ''))).strip()
+            v = str(row.get('user_birth_id', '')).strip()
+            if k:
+                ledger[k] = v
+        
+        input_key = str(license_key).strip()
+
+        if not ledger and len(records) > 0:
+             st.error("❌ 嚴重錯誤：找不到 license_key 欄位！請檢查 Google Sheet 標題。")
+             return False, "資料庫欄位錯誤"
+
+        if input_key in ledger:
+            saved_id = ledger[input_key]
+            
+            if not saved_id or saved_id == "":
+                cell = sheet.find(input_key)
+                sheet.update_cell(cell.row, 2, user_birth_id)
+                sheet.update_cell(cell.row, 3, str(datetime.now()))
+                return True, "✅ 序號首次啟用成功！"
+            
+            elif saved_id == user_birth_id:
+                return True, "歡迎回來！驗證成功。"
+            
+            else:
+                return False, "❌ 此序號已綁定其他生日，無法用於此命盤。"
+        else:
+            return False, f"❌ 無效的序號 ({input_key})，未在資料庫中找到。"
+            
+    except Exception as e:
+        return False, f"連線錯誤: {str(e)}"
+
+# --- 5. 文字排版 ---
+def format_text(text):
+    if pd.isna(text): return "（此欄位無資料）"
+    text = str(text)
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    text = text.replace("\n", "<br>") 
+    if "✓" in text:
+        text = text.replace("✓", "<br><br>✓ ")
+    return text
+
+def show_footer():
+    st.markdown("---")
+    st.markdown(
+        """<div style="text-align: center; color: #888888; font-size: 0.8em; padding: 10px;">
+            🔒 隱私聲明：本系統不會永久儲存您的個資，請安心使用。
+        </div>""", 
+        unsafe_allow_html=True
+    )
+
+# --- 6. 主程式介面 ---
+
+if "calculated" not in st.session_state:
+    st.session_state.calculated = False
+if "unlocked" not in st.session_state:
+    st.session_state.unlocked = False
+if "user_birth
