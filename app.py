@@ -99,6 +99,7 @@ def get_true_star_in_wu(year, month, day, hour_idx):
 # --- 4. Google Sheets 連線 ---
 
 def get_google_sheet_connection():
+    # 垂直寫法，防止複製時斷行
     scope = [
         'https://spreadsheets.google.com/feeds',
         'https://www.googleapis.com/auth/drive'
@@ -108,6 +109,7 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
         key_dict = dict(st.secrets["gcp_service_account"])
+        # 自動修復 Private Key
         if "private_key" in key_dict:
             pk = key_dict["private_key"]
             pk = pk.replace("\\n", "\n")
@@ -120,7 +122,7 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         
     client = gspread.authorize(creds)
-    # 這裡拆成兩行寫，避免斷行錯誤
+    # 拆成兩行寫
     spreadsheet = client.open("2026_Ledger")
     return spreadsheet.sheet1
 
@@ -134,10 +136,21 @@ def check_license_binding_cloud(license_key, user_birth_id):
             st.info("💡 系統診斷：資料庫連線成功！")
         # =============================
         
+        # [修正重點] 這裡不再使用長字串寫法，改用傳統迴圈，絕對不會斷行
         ledger = {}
         for row in records:
-            k = str(row.get('license_key', row.get('License_Key', ''))).strip()
-            v = str(row.get('user_birth_id', '')).strip()
+            # 取得欄位值 (允許 license_key 或 License_Key)
+            k_raw = row.get('license_key')
+            if not k_raw:
+                k_raw = row.get('License_Key', '')
+            
+            # 取得生日值
+            v_raw = row.get('user_birth_id', '')
+            
+            # 轉字串並去空白
+            k = str(k_raw).strip()
+            v = str(v_raw).strip()
+            
             if k:
                 ledger[k] = v
         
@@ -153,7 +166,9 @@ def check_license_binding_cloud(license_key, user_birth_id):
             if not saved_id or saved_id == "":
                 cell = sheet.find(input_key)
                 sheet.update_cell(cell.row, 2, user_birth_id)
-                sheet.update_cell(cell.row, 3, str(datetime.now()))
+                # 分開寫，避免過長
+                now_time = str(datetime.now())
+                sheet.update_cell(cell.row, 3, now_time)
                 return True, "✅ 序號首次啟用成功！"
             
             elif saved_id == user_birth_id:
@@ -192,4 +207,164 @@ if "calculated" not in st.session_state:
     st.session_state.calculated = False
 if "unlocked" not in st.session_state:
     st.session_state.unlocked = False
-if "user_birth
+if "user_birth_id" not in st.session_state:
+    st.session_state.user_birth_id = ""
+
+# === 狀態 A: 首頁 ===
+if not st.session_state.calculated:
+    st.title("2026 丙午年・紫微斗數運勢詳批")
+    if os.path.exists("banner.jpg"):
+        st.image("banner.jpg", use_container_width=True)
+    
+    st.markdown("""
+    ### 🐎 2026 火馬奔騰，您的運勢準備好了嗎？
+    
+    2026年是天干地支皆屬火的「**丙午年**」，又被稱為「**火馬年**」。
+    這意味著整體大環境將充滿**變動、爆發與蛻變**的能量。
+    
+    運勢強時如何乘勢而為？運勢弱時如何持盈保泰？
+    這將是您在充滿變革的火馬年中，掌握先機的重要關鍵。
+    
+    ---
+    
+    #### 【本流年測算特色】
+    
+    ✅ **全方位解析** 針對財運、事業、感情、健康四大運勢，提供具體建議。
+
+    ✅ **個人化命盤** 不講空泛的大道理，只針對您的命盤給出解方。
+
+    ✅ **關鍵月份提醒** 告訴您哪個月該衝、哪個月該守，精準掌握運勢起伏。
+
+    ---
+    """, unsafe_allow_html=True)
+    
+    st.success("👇 **請在此輸入您的出生資料，立即開啟流年卷軸**")
+    
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            b_year = st.number_input("出生年 (西元)", 1940, 2025, 1990)
+        with col2:
+            b_month = st.selectbox("出生月", range(1, 13), index=5)
+        col3, col4 = st.columns(2)
+        with col3:
+            b_day = st.selectbox("出生日", range(1, 32), index=14)
+        with col4:
+            hours_map = {
+                "子 (23-01)": 0, "丑 (01-03)": 1, "寅 (03-05)": 2, "卯 (05-07)": 3,
+                "辰 (07-09)": 4, "巳 (09-11)": 5, "午 (11-13)": 6, "未 (13-15)": 7,
+                "申 (15-17)": 8, "酉 (17-19)": 9, "戌 (19-21)": 10, "亥 (21-23)": 11
+            }
+            b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=6)
+            b_hour = hours_map[b_hour_str]
+
+        if st.button("🔥 開始排盤測算", type="primary", use_container_width=True):
+            st.session_state.b_year = b_year
+            st.session_state.b_month = b_month
+            st.session_state.b_day = b_day
+            st.session_state.b_hour = b_hour
+            st.session_state.user_birth_id = f"{b_year}-{b_month}-{b_day}-{b_hour}"
+            st.session_state.calculated = True
+            st.session_state.unlocked = False 
+            st.rerun()
+    
+    show_footer()
+
+# === 狀態 B: 結果頁 ===
+else:
+    if df_fortune is None:
+        st.error("❌ 系統錯誤：找不到資料庫檔案 `2026_data.csv`。")
+        if st.button("返回首頁"):
+            st.session_state.calculated = False
+            st.rerun()
+    else:
+        b_year = st.session_state.b_year
+        b_month = st.session_state.b_month
+        b_day = st.session_state.b_day
+        b_hour = st.session_state.b_hour
+        user_birth_id = st.session_state.user_birth_id
+
+        star_name = get_true_star_in_wu(b_year, b_month, b_day, b_hour)
+        res = df_fortune[df_fortune['Star_ID'] == star_name]
+        
+        if res.empty and "+" in star_name:
+            p1 = star_name.split("+")[0]
+            res = df_fortune[df_fortune['Star_ID'] == p1]
+            if not res.empty:
+                st.caption(f"💡 您的格局為【{star_name}】，顯示主星【{p1}】運勢。")
+
+        if not res.empty:
+            data = res.iloc[0]
+            
+            st.title("2026 丙午年・紫微斗數運勢詳批")
+            st.markdown(f"### 您的流年命宮主星：【{star_name}】")
+            
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                st.metric("年度運勢評分", f"{data['Score']} 分")
+            with col2:
+                st.markdown("##### ✨ 你的年度金句") 
+                st.info(f"{data['Summary']}")
+                
+            st.divider()
+            st.subheader(f"📜 {data['Title']}")
+            st.markdown(format_text(data['Content_General']), unsafe_allow_html=True)
+            st.divider()
+            
+            if not st.session_state.unlocked:
+                container = st.container(border=True)
+                container.markdown("### 🔒 解鎖完整流年報告")
+                container.write("付費解鎖後，您將看到以下詳細內容：")
+                
+                c1, c2, c3, c4, c5 = container.columns(5)
+                c1.markdown("❤️ **感情運**")
+                c2.markdown("💼 **事業運**")
+                c3.markdown("💰 **財運**")
+                c4.markdown("🏥 **健康運**") 
+                c5.markdown("📅 **流月運**")
+                
+                container.markdown("---")
+                container.caption("⚠️ 注意：序號一經使用即綁定此生日，無法轉讓給他人使用。")
+                col_input, col_btn = container.columns([3, 1])
+                input_key = col_input.text_input("請輸入解鎖序號", placeholder="例如: 2026-XXXX-XXXX", label_visibility="collapsed")
+                
+                if col_btn.button("立即解鎖", type="primary"):
+                    with st.spinner("正在連線資料庫驗證..."):
+                        is_valid, msg = check_license_binding_cloud(input_key, user_birth_id)
+                    
+                    if is_valid:
+                        st.session_state.unlocked = True
+                        st.rerun()
+                    else:
+                        container.error(msg)
+            else:
+                st.success("🎉 已解鎖完整報告！建議您截圖保存。")
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情運", "💼 事業運", "💰 財運", "🏥 健康運", "📅 流月運勢"])
+                
+                with tab1:
+                    st.markdown("### 感情與人際")
+                    st.markdown(format_text(data.get('Content_Love')), unsafe_allow_html=True)
+                with tab2:
+                    st.markdown("### 事業與工作")
+                    st.markdown(format_text(data.get('Content_Career')), unsafe_allow_html=True)
+                with tab3:
+                    st.markdown("### 財運與投資")
+                    st.markdown(format_text(data.get('Content_Fortune')), unsafe_allow_html=True)
+                with tab4: 
+                    st.markdown("### 🏥 健康與平安")
+                    st.markdown(format_text(data.get('Content_Health')), unsafe_allow_html=True)
+                with tab5:
+                    st.markdown("### 2026 流月運勢地圖")
+                    st.markdown(format_text(data.get('Content_Monthly')), unsafe_allow_html=True)
+                
+                st.markdown("---")
+                if st.button("🔄 重新測算 (輸入新生日需新序號)", use_container_width=True):
+                    st.session_state.calculated = False
+                    st.session_state.unlocked = False
+                    st.rerun()
+            show_footer()
+        else:
+            st.error(f"資料庫中找不到【{star_name}】的資料。")
+            if st.button("返回首頁"):
+                st.session_state.calculated = False
+                st.rerun()
