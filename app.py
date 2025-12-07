@@ -1,3 +1,15 @@
+# --- DEBUG 區塊 (測試完請刪除) ---
+if "gcp_service_account" in st.secrets:
+    keys = st.secrets["gcp_service_account"].keys()
+    if "private_key" not in keys:
+        st.error("❌ 嚴重錯誤：Secrets 裡面找不到 'private_key' 欄位！請檢查設定。")
+        st.write("目前讀到的欄位只有：", list(keys))
+    else:
+        st.success("✅ Secrets 設定正常，包含 private_key。")
+else:
+    st.error("❌ 嚴重錯誤：Secrets 裡完全找不到 [gcp_service_account] 區塊。")
+# -------------------------------
+
 import streamlit as st
 import pandas as pd
 from lunar_python import Lunar, Solar
