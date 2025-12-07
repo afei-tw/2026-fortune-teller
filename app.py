@@ -104,48 +104,8 @@ def get_google_sheet():
     """
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
     
-    # 判斷連線方式
     if os.path.exists("google_key.json"):
-        # 本機測試模式
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
-        # 雲端正式模式 (從 Secrets 讀取)
-        # 注意：這裡會自動處理 TOML 轉 Dict
-        key_dict = dict(st.secrets["gcp_service_account"])
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
-        
-    client = gspread.authorize(creds)
-    # ⚠️ 請確認你的 Google Sheet 名稱是這個
-    sheet = client.open("2026_Ledger").sheet1
-    return sheet
-
-def check_license_binding_cloud(license_key, user_birth_id):
-    """
-    商業版驗證邏輯：
-    1. 去 Google Sheet 找序號。
-    2. 如果找不到 -> 回傳無效。
-    3. 如果找到且未綁定 -> 綁定生日 -> 成功。
-    4. 如果找到且已綁定 -> 檢查生日是否相符。
-    """
-    try:
-        sheet = get_google_sheet()
-        records = sheet.get_all_records()
-        
-        # 建立快速查詢字典 {序號: 生日ID}
-        # 強制轉字串並去空白，避免輸入錯誤
-        ledger = {str(row['license_key']).strip(): str(row['user_birth_id']).strip() for row in records}
-        
-        input_key = str(license_key).strip()
-
-        # A. 檢查序號是否存在
-        if input_key in ledger:
-            saved_id = ledger[input_key]
-            
-            # B. 檢查綁定狀態
-            if not saved_id or saved_id == "":
-                # 情況 1: 全新序號 -> 執行綁定
-                cell = sheet.find(input_key)
-                # 更新 B欄(生日) 和 C欄(時間)
-                sheet.update_cell(cell.row, 2, user_birth_id)
-                sheet.update_cell(cell.row, 3, str(datetime.now()))
-                return True, "✅ 序號首次啟用成功！已綁定此生辰。"
+        # 從 Secrets 讀取 (雲端模式)
+        key_dict = dict(st.secrets["gcp_
