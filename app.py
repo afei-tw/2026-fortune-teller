@@ -98,4 +98,41 @@ def get_true_star_in_wu(year, month, day, hour_idx):
 # --- 4. Google Sheets 連線 (含診斷功能) ---
 
 def get_google_sheet_connection():
-    scope = ['
+    # 改用垂直條列寫法，避免複製時斷行錯誤
+    scope = [
+        'https://spreadsheets.google.com/feeds',
+        'https://www.googleapis.com/auth/drive'
+    ]
+    
+    if os.path.exists("google_key.json"):
+        creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
+    else:
+        key_dict = dict(st.secrets["gcp_service_account"])
+        # 自動修復換行
+        if "private_key" in key_dict:
+            key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+            if "-----BEGIN PRIVATE KEY-----" not in key_dict["private_key"]:
+                key_dict["private_key"] = "-----BEGIN PRIVATE KEY-----\n" + key_dict["private_key"]
+            if "-----END PRIVATE KEY-----" not in key_dict["private_key"]:
+                key_dict["private_key"] = key_dict["private_key"] + "\n-----END PRIVATE KEY-----"
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        
+    client = gspread.authorize(creds)
+    return client.open("2026_Ledger").sheet1
+
+def check_license_binding_cloud(license_key, user_birth_id):
+    try:
+        sheet = get_google_sheet_connection()
+        records = sheet.get_all_records()
+        
+        # === 診斷顯示區 (測試用，正式上線後可註解掉) ===
+        if len(records) > 0:
+            st.info("💡 系統診斷：成功讀取到資料庫。以下是第一筆資料內容，請檢查欄位名稱 (Key) 是否正確：")
+            st.write(records[0])
+        else:
+            st.warning("⚠️ 警告：資料庫是空的！請確認 Google Sheet 裡面有資料。")
+        # ==========================================
+        
+        ledger = {str(row.get('license_key', '')).strip(): str(row.get('user_birth_id', '')).strip() for row in records}
+        input_key
