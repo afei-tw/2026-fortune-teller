@@ -107,7 +107,6 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
         key_dict = dict(st.secrets["gcp_service_account"])
-        # 自動修復 Private Key
         if "private_key" in key_dict:
             pk = key_dict["private_key"]
             pk = pk.replace("\\n", "\n")
@@ -121,34 +120,21 @@ def get_google_sheet_connection():
         
     client = gspread.authorize(creds)
     
-    # === ⚠️ 關鍵修改：請在這裡填入你的 Google Sheet ID ===
-    # 範例: '1aBcD-xYz12345...' (從網址列複製)
-    sheet_id = '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' 
-    # =================================================
+    # === ⚠️ 請務必在此填入你的 Google Sheet ID (從網址複製) ===
+    sheet_id = '請將這裡替換成你的_Sheet_ID' 
+    # ======================================================
     
-    # 如果使用者忘記填 ID，這裡會嘗試用檔名，但強烈建議填 ID
     if '請將這裡替換成你的_Sheet_ID' in sheet_id:
-         # 舊的 fallback 方法 (不建議)
+         # 如果使用者忘記填，嘗試用檔名 (不建議，容易連錯)
          return client.open("2026_Ledger").sheet1
     else:
-         # 新的絕對準確方法
+         # 指定 ID 連線 (最穩)
          return client.open_by_key(sheet_id).sheet1
 
 def check_license_binding_cloud(license_key, user_birth_id):
     try:
         sheet = get_google_sheet_connection()
         records = sheet.get_all_records()
-        
-        # === 診斷區 ===
-        if len(records) > 0:
-            # 這裡顯示目前讀到的第一筆資料，讓你確認是不是連對檔案了
-            first_row = records[0]
-            first_key = str(first_row.get('license_key', '')).strip()
-            # 為了美觀，只顯示前幾碼
-            st.info(f"💡 連線成功！資料庫中第一筆序號為：{first_key}...")
-        else:
-            st.warning("⚠️ 資料庫是空的")
-        # =============
         
         ledger = {}
         for row in records:
@@ -191,10 +177,14 @@ def format_text(text):
 
 def show_footer():
     st.markdown("---")
+    # [新增] 品牌連結與版權聲明
     st.markdown(
-        """<div style="text-align: center; color: #888888; font-size: 0.8em; padding: 10px;">
-            🔒 隱私聲明：本系統不會永久儲存您的個資，請安心使用。
-        </div>""", 
+        """
+        <div style="text-align: center; color: #888888; font-size: 0.9em; line-height: 1.8;">
+            本測算系統由 <a href="https://afei-tw.com/" target="_blank" style="color: #FF4B4B; text-decoration: none; font-weight: bold;">阿飛．不會飛</a> 提供<br>
+            <span style="font-size: 0.8em;">🔒 隱私聲明：本系統不會永久儲存您的個資，請安心使用。</span>
+        </div>
+        """, 
         unsafe_allow_html=True
     )
 
@@ -321,6 +311,12 @@ else:
                 c5.markdown("📅 **流月運**")
                 
                 container.markdown("---")
+                
+                # [新增] 導購按鈕區塊
+                col_buy_btn, col_buy_text = container.columns([1, 2])
+                with col_buy_btn:
+                    st.link_button("💳 尚未購買？前往取得序號", "https://afei-tw.com/product/2026-fortune-teller-ziwei/", type="secondary", use_container_width=True)
+                
                 container.caption("⚠️ 注意：序號一經使用即綁定此生日，無法轉讓給他人使用。")
                 col_input, col_btn = container.columns([3, 1])
                 input_key = col_input.text_input("請輸入解鎖序號", placeholder="例如: 2026-XXXX-XXXX", label_visibility="collapsed")
