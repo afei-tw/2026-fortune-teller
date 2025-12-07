@@ -30,7 +30,6 @@ def load_data():
 df_fortune = load_data()
 
 # --- 3. 核心排盤演算法 ---
-
 def get_bazi_ju(year_gan_idx, life_branch_idx):
     start_gan = (year_gan_idx % 5) * 2 + 2 
     offset = (life_branch_idx - 2) % 12
@@ -99,7 +98,6 @@ def get_true_star_in_wu(year, month, day, hour_idx):
 # --- 4. Google Sheets 連線 ---
 
 def get_google_sheet_connection():
-    # 垂直寫法，防止複製時斷行
     scope = [
         'https://spreadsheets.google.com/feeds',
         'https://www.googleapis.com/auth/drive'
@@ -109,7 +107,6 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
         key_dict = dict(st.secrets["gcp_service_account"])
-        # 自動修復 Private Key
         if "private_key" in key_dict:
             pk = key_dict["private_key"]
             pk = pk.replace("\\n", "\n")
@@ -122,43 +119,53 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         
     client = gspread.authorize(creds)
-    # 拆成兩行寫
-    spreadsheet = client.open("2026_Ledger")
-    return spreadsheet.sheet1
+    return client.open("2026_Ledger").sheet1
 
 def check_license_binding_cloud(license_key, user_birth_id):
     try:
         sheet = get_google_sheet_connection()
         records = sheet.get_all_records()
         
-        # === 診斷資訊 (讀取成功會顯示) ===
-        if len(records) > 0:
-            st.info("💡 系統診斷：資料庫連線成功！")
-        # =============================
+        # === 🕵️‍♂️ X光診斷區 (重點在這裡！) ===
+        st.markdown("---")
+        st.markdown("### 🕵️‍♂️ 資料庫 X 光檢查")
         
-        # [修正重點] 這裡不再使用長字串寫法，改用傳統迴圈，絕對不會斷行
+        if not records:
+            st.error("❌ 資料庫是空的！Python 讀不到任何資料。")
+        else:
+            # 1. 印出欄位名稱
+            first_row = records[0]
+            headers = list(first_row.keys())
+            st.write("1. 系統讀到的欄位名稱 (Headers):")
+            st.code(headers) # 這會把欄位名稱秀出來，請檢查有沒有空格
+            
+            # 2. 印出第一筆資料
+            st.write("2. 第一筆資料內容:")
+            st.json(first_row)
+            
+            # 3. 檢查欄位是否正確
+            if "license_key" not in headers:
+                st.error(f"❌ 欄位名稱錯誤！系統找不到 'license_key'。目前只有: {headers}")
+                return False, "欄位名稱錯誤"
+            else:
+                st.success("✅ 欄位名稱正確！")
+
+        # ==========================================
+        
         ledger = {}
         for row in records:
-            # 取得欄位值 (允許 license_key 或 License_Key)
-            k_raw = row.get('license_key')
-            if not k_raw:
-                k_raw = row.get('License_Key', '')
+            # 寬容模式：不管欄位是 license_key 還是 license_key (帶空格)，都試著抓
+            k = None
+            for key in row.keys():
+                if key.strip().lower() == "license_key":
+                    k = str(row[key]).strip()
+                    break
             
-            # 取得生日值
-            v_raw = row.get('user_birth_id', '')
-            
-            # 轉字串並去空白
-            k = str(k_raw).strip()
-            v = str(v_raw).strip()
-            
+            v = str(row.get('user_birth_id', '')).strip()
             if k:
                 ledger[k] = v
         
         input_key = str(license_key).strip()
-
-        if not ledger and len(records) > 0:
-             st.error("❌ 嚴重錯誤：找不到 license_key 欄位！請檢查 Google Sheet 標題。")
-             return False, "資料庫欄位錯誤"
 
         if input_key in ledger:
             saved_id = ledger[input_key]
@@ -166,9 +173,7 @@ def check_license_binding_cloud(license_key, user_birth_id):
             if not saved_id or saved_id == "":
                 cell = sheet.find(input_key)
                 sheet.update_cell(cell.row, 2, user_birth_id)
-                # 分開寫，避免過長
-                now_time = str(datetime.now())
-                sheet.update_cell(cell.row, 3, now_time)
+                sheet.update_cell(cell.row, 3, str(datetime.now()))
                 return True, "✅ 序號首次啟用成功！"
             
             elif saved_id == user_birth_id:
