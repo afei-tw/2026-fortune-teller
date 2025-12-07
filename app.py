@@ -95,7 +95,7 @@ def get_true_star_in_wu(year, month, day, hour_idx):
             
     return "+".join(target_stars)
 
-# --- 4. Google Sheets 連線 (使用 ID 連線) ---
+# --- 4. Google Sheets 連線 ---
 
 def get_google_sheet_connection():
     scope = [
@@ -120,15 +120,14 @@ def get_google_sheet_connection():
         
     client = gspread.authorize(creds)
     
-    # === ⚠️ 請務必在此填入你的 Google Sheet ID (從網址複製) ===
-    sheet_id = '請將這裡替換成你的_Sheet_ID' 
-    # ======================================================
+    # === ⚠️ 請務必在此填入你的 Google Sheet ID ===
+    sheet_id = '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' # (請填入你之前複製的 ID)
+    # ==========================================
     
-    if '請將這裡替換成你的_Sheet_ID' in sheet_id:
-         # 如果使用者忘記填，嘗試用檔名 (不建議，容易連錯)
+    # 若 ID 仍為預設值，嘗試 fallback (但建議填 ID)
+    if '1aBcD' in sheet_id: 
          return client.open("2026_Ledger").sheet1
     else:
-         # 指定 ID 連線 (最穩)
          return client.open_by_key(sheet_id).sheet1
 
 def check_license_binding_cloud(license_key, user_birth_id):
@@ -177,7 +176,6 @@ def format_text(text):
 
 def show_footer():
     st.markdown("---")
-    # [新增] 品牌連結與版權聲明
     st.markdown(
         """
         <div style="text-align: center; color: #888888; font-size: 0.9em; line-height: 1.8;">
@@ -312,10 +310,8 @@ else:
                 
                 container.markdown("---")
                 
-                # [新增] 導購按鈕區塊
-                col_buy_btn, col_buy_text = container.columns([1, 2])
-                with col_buy_btn:
-                    st.link_button("💳 尚未購買？前往取得序號", "https://afei-tw.com/product/2026-fortune-teller-ziwei/", type="secondary", use_container_width=True)
+                # [修正] 導購按鈕區塊 - 移除欄位限制，全寬顯示
+                st.link_button("💳 只需298元解鎖！前往取得序號", "https://afei-tw.com/product/2026-fortune-teller-ziwei/", type="secondary", use_container_width=True)
                 
                 container.caption("⚠️ 注意：序號一經使用即綁定此生日，無法轉讓給他人使用。")
                 col_input, col_btn = container.columns([3, 1])
