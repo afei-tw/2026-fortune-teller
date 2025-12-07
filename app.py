@@ -134,16 +134,6 @@ def get_google_sheet_connection():
 
 def check_license_binding_cloud(license_key, user_birth_id):
     try:
-        # 延後連線：只有在驗證時才連線
-        sheet = get_google_sheet_connection()
-        records = sheet.get_all_records()
-        
-        ledger = {str(row['license_key']).strip(): str(row['user_birth_id']).strip() for row in records}
-        input_key = str(license_key).strip()
-
-
-def check_license_binding_cloud(license_key, user_birth_id):
-    try:
         sheet = get_google_sheet_connection()
         records = sheet.get_all_records()
         
@@ -155,6 +145,15 @@ def check_license_binding_cloud(license_key, user_birth_id):
         
         # ... (原本的程式碼保持不變) ...
 
+
+def check_license_binding_cloud(license_key, user_birth_id):
+    try:
+        # 延後連線：只有在驗證時才連線
+        sheet = get_google_sheet_connection()
+        records = sheet.get_all_records()
+        
+        ledger = {str(row['license_key']).strip(): str(row['user_birth_id']).strip() for row in records}
+        input_key = str(license_key).strip()
 
         if input_key in ledger:
             saved_id = ledger[input_key]
