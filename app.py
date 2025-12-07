@@ -3,7 +3,10 @@ import pandas as pd
 from lunar_python import Lunar, Solar
 import os
 import json
-import re  # <--- 新增：引入正則表達式庫 (這是文字處理神器)
+import re
+import gspread # 新增：Google Sheets 控制庫
+from oauth2client.service_account import ServiceAccountCredentials # 新增：驗證庫
+from datetime import datetime
 
 # --- 1. 頁面設定 ---
 st.set_page_config(
@@ -26,7 +29,7 @@ def load_data():
 
 df_fortune = load_data()
 
-# --- 3. 核心排盤演算法 ---
+# --- 3. 核心排盤演算法 (保持不變) ---
 def get_bazi_ju(year_gan_idx, life_branch_idx):
     start_gan = (year_gan_idx % 5) * 2 + 2 
     offset = (life_branch_idx - 2) % 12
@@ -92,52 +95,80 @@ def get_true_star_in_wu(year, month, day, hour_idx):
     except Exception:
         return "紫微"
 
-# --- 序號綁定邏輯 ---
-LEDGER_FILE = "key_ledger.json"
+# --- [關鍵升級] Google Sheets 資料庫連線 ---
 
-def check_license_binding(license_key, user_birth_id):
-    if os.path.exists(LEDGER_FILE):
-        try:
-            with open(LEDGER_FILE, "r", encoding="utf-8") as f:
-                ledger = json.load(f)
-        except:
-            ledger = {}
+# 使用快取來維持連線，避免每次操作都重新連線 Google
+@st.cache_resource
+def get_google_sheet():
+    # 定義需要的權限
+    scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+    
+    # 判斷是在本機測試，還是在 Streamlit Cloud
+    # 如果是在雲端，我們從 st.secrets 讀取金鑰 (比較安全)
+    # 如果是在本機，我們讀取 google_key.json
+    
+    if os.path.exists("google_key.json"):
+        creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
-        ledger = {}
+        # 雲端部署時的邏輯 (稍後會教你設定)
+        # 這裡將 secrets 轉換成 json 格式給 oauth2client 使用
+        key_dict = dict(st.secrets["gcp_service_account"])
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        
+    client = gspread.authorize(creds)
+    # 開啟你的試算表 (請確認名稱完全一致)
+    sheet = client.open("2026_Ledger").sheet1
+    return sheet
 
-    if license_key in ledger:
-        saved_id = ledger[license_key]
-        if saved_id == user_birth_id:
-            return True, "歡迎回來！驗證成功。"
-        else:
-            return False, "❌ 此序號已綁定其他生日，無法用於此命盤。"
-    else:
-        if license_key == "8888" or license_key.startswith("VIP"):
-            ledger[license_key] = user_birth_id
-            with open(LEDGER_FILE, "w", encoding="utf-8") as f:
-                json.dump(ledger, f)
-            return True, "✅ 序號啟用成功！已綁定此生辰。"
-        else:
-            return False, "❌ 無效的序號。"
+def check_license_binding_cloud(license_key, user_birth_id):
+    """
+    V13.0: 改為讀寫 Google Sheets
+    """
+    try:
+        sheet = get_google_sheet()
+        
+        # 1. 讀取所有資料 (取得第一欄序號與第二欄生日)
+        records = sheet.get_all_records() # 這會回傳一個 List of Dict
+        
+        # 先轉換成簡單的字典格式 {key: birth_id} 以便查詢
+        ledger = {str(row['license_key']): str(row['user_birth_id']) for row in records}
+        
+        license_key = str(license_key).strip()
 
-# --- [強力修正] 文字排版優化函數 ---
+        # 2. 判斷邏輯
+        if license_key in ledger:
+            # 序號存在
+            saved_id = ledger[license_key]
+            # 檢查是否為空值 (代表是新序號，還沒人用過)
+            if not saved_id or saved_id == "":
+                # 綁定！
+                # 找到該序號所在的行數 (row index)
+                # gspread 的 find 很方便
+                cell = sheet.find(license_key)
+                # 更新 B 欄 (Birthday ID) 和 C 欄 (Time)
+                sheet.update_cell(cell.row, 2, user_birth_id)
+                sheet.update_cell(cell.row, 3, str(datetime.now()))
+                return True, "✅ 序號首次啟用成功！已綁定此生辰。"
+            
+            elif saved_id == user_birth_id:
+                return True, "歡迎回來！驗證成功。"
+            else:
+                return False, "❌ 此序號已綁定其他生日，無法用於此命盤。"
+        else:
+            return False, "❌ 無效的序號 (資料庫中找不到此序號)。"
+            
+    except Exception as e:
+        return False, f"連線錯誤，請稍後再試: {e}"
+
+# --- 文字排版函數 ---
 def format_text(text):
     if pd.isna(text):
         return "（此欄位無資料）"
-    
     text = str(text)
-    
-    # 1. 強力加粗：用正則表達式，把 Markdown 的 **文字** 替換成 HTML 的 <b>文字</b>
-    # 這樣保證瀏覽器一定會渲染成粗體，不會失敗
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-    
-    # 2. 處理 Excel 的 Alt+Enter 換行
-    text = text.replace("\n", "<br>") # 改用 HTML 的換行標籤 <br>，在 unsafe_allow_html 下更穩
-    
-    # 3. 處理打勾符號的條列式
+    text = text.replace("\n", "<br>") 
     if "✓" in text:
         text = text.replace("✓", "<br><br>✓ ")
-        
     return text
 
 # --- 頁尾 ---
@@ -164,12 +195,11 @@ if "user_birth_id" not in st.session_state:
 # === 主畫面邏輯 ===
 
 if not st.session_state.calculated:
-    # --- A. 首頁 (Landing Page) ---
+    # --- A. 首頁 ---
     st.title("2026 丙午年・紫微斗數運勢詳批")
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
     
-    # 首頁文案也開啟 HTML 模式，確保排版漂亮
     st.markdown("""
     ### 🐎 2026 火馬奔騰，您的運勢準備好了嗎？
     
@@ -226,8 +256,7 @@ if not st.session_state.calculated:
     show_footer()
 
 else:
-    # --- B. 測算結果頁 (Result Page) ---
-    
+    # --- B. 結果頁 ---
     if df_fortune is None:
         st.error("❌ 系統錯誤：找不到資料庫檔案 `2026_data.csv`。")
         st.stop()
@@ -262,7 +291,6 @@ else:
             
         st.divider()
         st.subheader(f"📜 {data['Title']}")
-        # ⚠️ 關鍵：啟用 unsafe_allow_html=True 讓 <b> 標籤生效
         st.markdown(format_text(data['Content_General']), unsafe_allow_html=True)
         st.divider()
         
@@ -284,7 +312,10 @@ else:
             input_key = col_input.text_input("請輸入解鎖序號", placeholder="測試序號: 8888", label_visibility="collapsed")
             
             if col_btn.button("立即解鎖", type="primary"):
-                is_valid, msg = check_license_binding(input_key, user_birth_id)
+                # 呼叫雲端綁定檢查
+                with st.spinner("正在連線資料庫驗證..."):
+                    is_valid, msg = check_license_binding_cloud(input_key, user_birth_id)
+                
                 if is_valid:
                     st.session_state.unlocked = True
                     st.rerun()
@@ -295,7 +326,6 @@ else:
             
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情運", "💼 事業運", "💰 財運", "🏥 健康運", "📅 流月運勢"])
             
-            # ⚠️ 這裡的每一個 tab 內容都要加上 unsafe_allow_html=True
             with tab1:
                 st.markdown("### 感情與人際")
                 st.markdown(format_text(data.get('Content_Love')), unsafe_allow_html=True)
