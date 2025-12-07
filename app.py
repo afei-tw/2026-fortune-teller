@@ -95,7 +95,7 @@ def get_true_star_in_wu(year, month, day, hour_idx):
             
     return "+".join(target_stars)
 
-# --- 4. Google Sheets 連線 ---
+# --- 4. Google Sheets 連線 (使用 ID 連線) ---
 
 def get_google_sheet_connection():
     scope = [
@@ -107,6 +107,7 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
         key_dict = dict(st.secrets["gcp_service_account"])
+        # 自動修復 Private Key
         if "private_key" in key_dict:
             pk = key_dict["private_key"]
             pk = pk.replace("\\n", "\n")
@@ -119,48 +120,39 @@ def get_google_sheet_connection():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         
     client = gspread.authorize(creds)
-    return client.open("2026_Ledger").sheet1
+    
+    # === ⚠️ 關鍵修改：請在這裡填入你的 Google Sheet ID ===
+    # 範例: '1aBcD-xYz12345...' (從網址列複製)
+    sheet_id = '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' 
+    # =================================================
+    
+    # 如果使用者忘記填 ID，這裡會嘗試用檔名，但強烈建議填 ID
+    if '請將這裡替換成你的_Sheet_ID' in sheet_id:
+         # 舊的 fallback 方法 (不建議)
+         return client.open("2026_Ledger").sheet1
+    else:
+         # 新的絕對準確方法
+         return client.open_by_key(sheet_id).sheet1
 
 def check_license_binding_cloud(license_key, user_birth_id):
     try:
         sheet = get_google_sheet_connection()
         records = sheet.get_all_records()
         
-        # === 🕵️‍♂️ X光診斷區 (重點在這裡！) ===
-        st.markdown("---")
-        st.markdown("### 🕵️‍♂️ 資料庫 X 光檢查")
-        
-        if not records:
-            st.error("❌ 資料庫是空的！Python 讀不到任何資料。")
-        else:
-            # 1. 印出欄位名稱
+        # === 診斷區 ===
+        if len(records) > 0:
+            # 這裡顯示目前讀到的第一筆資料，讓你確認是不是連對檔案了
             first_row = records[0]
-            headers = list(first_row.keys())
-            st.write("1. 系統讀到的欄位名稱 (Headers):")
-            st.code(headers) # 這會把欄位名稱秀出來，請檢查有沒有空格
-            
-            # 2. 印出第一筆資料
-            st.write("2. 第一筆資料內容:")
-            st.json(first_row)
-            
-            # 3. 檢查欄位是否正確
-            if "license_key" not in headers:
-                st.error(f"❌ 欄位名稱錯誤！系統找不到 'license_key'。目前只有: {headers}")
-                return False, "欄位名稱錯誤"
-            else:
-                st.success("✅ 欄位名稱正確！")
-
-        # ==========================================
+            first_key = str(first_row.get('license_key', '')).strip()
+            # 為了美觀，只顯示前幾碼
+            st.info(f"💡 連線成功！資料庫中第一筆序號為：{first_key}...")
+        else:
+            st.warning("⚠️ 資料庫是空的")
+        # =============
         
         ledger = {}
         for row in records:
-            # 寬容模式：不管欄位是 license_key 還是 license_key (帶空格)，都試著抓
-            k = None
-            for key in row.keys():
-                if key.strip().lower() == "license_key":
-                    k = str(row[key]).strip()
-                    break
-            
+            k = str(row.get('license_key', row.get('License_Key', ''))).strip()
             v = str(row.get('user_birth_id', '')).strip()
             if k:
                 ledger[k] = v
