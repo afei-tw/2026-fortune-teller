@@ -121,21 +121,12 @@ def check_license_binding(license_key, user_birth_id):
 
 # --- 文字排版優化函數 ---
 def format_text(text):
-    """
-    1. 自動將 ✓ 符號換行
-    2. 處理空值
-    """
     if pd.isna(text):
         return "（此欄位無資料）"
-    
-    # 強制轉為字串
     text = str(text)
-    
-    # 自動換行邏輯：將 "✓" 替換為 "兩次換行 + ✓ "
-    # 這樣在網頁上就會變成漂亮的條列式
+    # 自動換行邏輯
     if "✓" in text:
         text = text.replace("✓", "\n\n✓ ")
-        
     return text
 
 # --- 頁尾 ---
@@ -194,24 +185,20 @@ if not st.session_state.calculated:
     with st.container(border=True):
         col1, col2 = st.columns(2)
         with col1:
-            # 修正：預設年份改為 1990
             b_year = st.number_input("出生年 (西元)", 1940, 2025, 1990)
         with col2:
-            # 修正：預設月份改為 6月 (index=5)
-            b_month = st.selectbox("出生月", range(1, 13), index=5)
+            b_month = st.selectbox("出生月", range(1, 13), index=5) # 預設6月
             
         col3, col4 = st.columns(2)
         with col3:
-            # 修正：預設日期改為 15日 (index=14)
-            b_day = st.selectbox("出生日", range(1, 32), index=14)
+            b_day = st.selectbox("出生日", range(1, 32), index=14) # 預設15日
         with col4:
             hours_map = {
                 "子 (23-01)": 0, "丑 (01-03)": 1, "寅 (03-05)": 2, "卯 (05-07)": 3,
                 "辰 (07-09)": 4, "巳 (09-11)": 5, "午 (11-13)": 6, "未 (13-15)": 7,
                 "申 (15-17)": 8, "酉 (17-19)": 9, "戌 (19-21)": 10, "亥 (21-23)": 11
             }
-            # 修正：預設時辰改為 午時 (index=6)
-            b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=6)
+            b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=6) # 預設午時
             b_hour = hours_map[b_hour_str]
 
         if st.button("🔥 開始排盤測算", type="primary", use_container_width=True):
@@ -263,8 +250,8 @@ else:
             
         st.divider()
         st.subheader(f"📜 {data['Title']}")
-        # 這裡套用 format_text 來自動排版
-        st.write(format_text(data['Content_General']))
+        # 修正：將 st.write 改為 st.markdown 以強制渲染粗體
+        st.markdown(format_text(data['Content_General']))
         st.divider()
         
         if not st.session_state.unlocked:
@@ -296,22 +283,22 @@ else:
             
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情運", "💼 事業運", "💰 財運", "🏥 健康運", "📅 流月運勢"])
             
+            # 修正：所有分頁的內容也都改用 st.markdown
             with tab1:
                 st.markdown("### 感情與人際")
-                st.write(format_text(data.get('Content_Love')))
+                st.markdown(format_text(data.get('Content_Love')))
             with tab2:
                 st.markdown("### 事業與工作")
-                st.write(format_text(data.get('Content_Career')))
+                st.markdown(format_text(data.get('Content_Career')))
             with tab3:
                 st.markdown("### 財運與投資")
-                st.write(format_text(data.get('Content_Fortune')))
+                st.markdown(format_text(data.get('Content_Fortune')))
             with tab4: 
                 st.markdown("### 🏥 健康與平安")
-                # 特別注意：這裡會自動幫你的打勾符號換行
-                st.write(format_text(data.get('Content_Health')))
+                st.markdown(format_text(data.get('Content_Health')))
             with tab5:
                 st.markdown("### 2026 流月運勢地圖")
-                st.write(format_text(data.get('Content_Monthly')))
+                st.markdown(format_text(data.get('Content_Monthly')))
             
             st.markdown("---")
             if st.button("🔄 重新測算 (輸入新生日需新序號)", use_container_width=True):
