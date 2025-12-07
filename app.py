@@ -1,16 +1,3 @@
-# --- DEBUG 區塊 (測試完請刪除) ---
-if "gcp_service_account" in st.secrets:
-    keys = st.secrets["gcp_service_account"].keys()
-    if "private_key" not in keys:
-        st.error("❌ 嚴重錯誤：Secrets 裡面找不到 'private_key' 欄位！請檢查設定。")
-        st.write("目前讀到的欄位只有：", list(keys))
-    else:
-        st.success("✅ Secrets 設定正常，包含 private_key。")
-else:
-    st.error("❌ 嚴重錯誤：Secrets 裡完全找不到 [gcp_service_account] 區塊。")
-# -------------------------------
-
-
 import streamlit as st
 import pandas as pd
 from lunar_python import Lunar, Solar
@@ -21,14 +8,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-# --- 1. 頁面設定 (必須在第一行) ---
+# --- 1. 頁面設定 (這行一定要在最前面) ---
 st.set_page_config(
     page_title="2026 丙午年・紫微斗數運勢詳批", 
     page_icon="🔮", 
     layout="centered"
 )
 
-# --- 2. 載入 CSV 資料 (快取) ---
+# --- 2. 載入 CSV 資料 ---
 @st.cache_data
 def load_data():
     try:
@@ -108,21 +95,27 @@ def get_true_star_in_wu(year, month, day, hour_idx):
     except Exception:
         return "紫微"
 
-# --- 4. Google Sheets 連線 (調整邏輯) ---
+# --- 4. Google Sheets 連線 (包含自動修復 Key) ---
 
-# 注意：這裡不使用 cache_resource，改為每次呼叫時建立短連線，避免 Session 過期卡死
 def get_google_sheet_connection():
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
     
     if os.path.exists("google_key.json"):
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
-        # 雲端模式
+        # 雲端模式：從 Secrets 讀取
+        # ⚠️ 這裡做了防呆處理：複製 Secrets 內容，以免修改到原始檔
         key_dict = dict(st.secrets["gcp_service_account"])
+        
+        # ⚠️ 自動修復 Private Key 的換行問題
+        # 如果 user 在 Secrets 裡直接貼上 \n 字串，Python 會把它當成兩個字元。
+        # 這裡強制把 "\\n" 替換成真正的換行符號 "\n"
+        if "private_key" in key_dict:
+            key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         
     client = gspread.authorize(creds)
-    # 這裡的 open 動作比較花時間，所以只在按鈕按下後才執行
     return client.open("2026_Ledger").sheet1
 
 def check_license_binding_cloud(license_key, user_birth_id):
@@ -136,9 +129,7 @@ def check_license_binding_cloud(license_key, user_birth_id):
 
         if input_key in ledger:
             saved_id = ledger[input_key]
-            
             if not saved_id or saved_id == "":
-                # 綁定
                 cell = sheet.find(input_key)
                 sheet.update_cell(cell.row, 2, user_birth_id)
                 sheet.update_cell(cell.row, 3, str(datetime.now()))
@@ -151,7 +142,8 @@ def check_license_binding_cloud(license_key, user_birth_id):
             return False, "❌ 無效的序號，請確認輸入正確或前往購買。"
             
     except Exception as e:
-        return False, f"連線錯誤: {e}"
+        # 如果還是連線失敗，會顯示具體錯誤
+        return False, f"連線錯誤: {str(e)}"
 
 # --- 5. 文字排版 ---
 def format_text(text):
@@ -172,9 +164,8 @@ def show_footer():
         unsafe_allow_html=True
     )
 
-# --- 6. 主程式介面邏輯 (UI First) ---
+# --- 6. 主程式介面 ---
 
-# 初始化
 if "calculated" not in st.session_state:
     st.session_state.calculated = False
 if "unlocked" not in st.session_state:
@@ -250,7 +241,6 @@ else:
             st.session_state.calculated = False
             st.rerun()
     else:
-        # 只有在確認檔案存在後才進行計算，避免前面卡死
         b_year = st.session_state.b_year
         b_month = st.session_state.b_month
         b_day = st.session_state.b_day
