@@ -300,9 +300,3 @@ else:
         show_footer()
     else:
         st.error(f"資料庫中找不到【{star_name}】的資料。")
-# ttl=600 代表快取存活 600秒 (10分鐘)
-# 超過時間會自動重讀，不用手動清除
-@st.cache_data(ttl=600) 
-def load_data():
-    try:
-        # ... (這裡不用動)
