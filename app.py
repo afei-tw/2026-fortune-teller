@@ -104,8 +104,17 @@ def get_google_sheet():
     """
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
     
+    # 判斷連線方式
     if os.path.exists("google_key.json"):
+        # 本機測試模式
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
-        # 從 Secrets 讀取 (雲端模式)
-        key_dict = dict(st.secrets["gcp_
+        # 雲端正式模式 (從 Secrets 讀取)
+        # ⚠️ 注意：下面這一行必須完整，不能斷行
+        key_dict = dict(st.secrets["gcp_service_account"])
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        
+    client = gspread.authorize(creds)
+    # ⚠️ 請確認你的 Google Sheet 名稱是這個
+    sheet = client.open("2026_Ledger").sheet1
+    return sheet
