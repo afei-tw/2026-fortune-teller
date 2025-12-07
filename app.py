@@ -141,6 +141,21 @@ def check_license_binding_cloud(license_key, user_birth_id):
         ledger = {str(row['license_key']).strip(): str(row['user_birth_id']).strip() for row in records}
         input_key = str(license_key).strip()
 
+
+def check_license_binding_cloud(license_key, user_birth_id):
+    try:
+        sheet = get_google_sheet_connection()
+        records = sheet.get_all_records()
+        
+        # --- 👇 新增這段 DEBUG 顯示代碼 (測試完後可刪除) ---
+        # 這會把 Google Sheet 讀到的前 3 筆資料直接印在網頁上給你看
+        st.write("🔍 系統讀到的 Google Sheet 資料 (前 3 筆):")
+        st.write(records[:3]) 
+        # ------------------------------------------------
+        
+        # ... (原本的程式碼保持不變) ...
+
+
         if input_key in ledger:
             saved_id = ledger[input_key]
             if not saved_id or saved_id == "":
