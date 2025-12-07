@@ -3,6 +3,7 @@ import pandas as pd
 from lunar_python import Lunar, Solar
 import os
 import json
+import re  # <--- 新增：引入正則表達式庫 (這是文字處理神器)
 
 # --- 1. 頁面設定 ---
 st.set_page_config(
@@ -119,20 +120,23 @@ def check_license_binding(license_key, user_birth_id):
         else:
             return False, "❌ 無效的序號。"
 
-# --- 文字排版優化函數 (關鍵修改) ---
+# --- [強力修正] 文字排版優化函數 ---
 def format_text(text):
     if pd.isna(text):
         return "（此欄位無資料）"
     
     text = str(text)
     
-    # 1. 處理 Excel 的 Alt+Enter 換行
-    # 在 Markdown 中，單純的 \n 常常被視為空白，要 \n\n 才會真的換段落
-    text = text.replace("\n", "\n\n")
+    # 1. 強力加粗：用正則表達式，把 Markdown 的 **文字** 替換成 HTML 的 <b>文字</b>
+    # 這樣保證瀏覽器一定會渲染成粗體，不會失敗
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
     
-    # 2. 處理打勾符號的條列式
+    # 2. 處理 Excel 的 Alt+Enter 換行
+    text = text.replace("\n", "<br>") # 改用 HTML 的換行標籤 <br>，在 unsafe_allow_html 下更穩
+    
+    # 3. 處理打勾符號的條列式
     if "✓" in text:
-        text = text.replace("✓", "\n\n✓ ")
+        text = text.replace("✓", "<br><br>✓ ")
         
     return text
 
@@ -165,6 +169,7 @@ if not st.session_state.calculated:
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
     
+    # 首頁文案也開啟 HTML 模式，確保排版漂亮
     st.markdown("""
     ### 🐎 2026 火馬奔騰，您的運勢準備好了嗎？
     
@@ -185,7 +190,7 @@ if not st.session_state.calculated:
     ✅ **關鍵月份提醒** 告訴您哪個月該衝、哪個月該守，精準掌握運勢起伏。
 
     ---
-    """)
+    """, unsafe_allow_html=True)
     
     st.success("👇 **請在此輸入您的出生資料，立即開啟流年卷軸**")
     
@@ -257,8 +262,8 @@ else:
             
         st.divider()
         st.subheader(f"📜 {data['Title']}")
-        # 修正：改用 st.markdown 強制渲染 Markdown 語法 (粗體、變色)
-        st.markdown(format_text(data['Content_General']))
+        # ⚠️ 關鍵：啟用 unsafe_allow_html=True 讓 <b> 標籤生效
+        st.markdown(format_text(data['Content_General']), unsafe_allow_html=True)
         st.divider()
         
         if not st.session_state.unlocked:
@@ -290,22 +295,22 @@ else:
             
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情運", "💼 事業運", "💰 財運", "🏥 健康運", "📅 流月運勢"])
             
-            # 以下全部改用 st.markdown，並確保 format_text 有處理換行
+            # ⚠️ 這裡的每一個 tab 內容都要加上 unsafe_allow_html=True
             with tab1:
                 st.markdown("### 感情與人際")
-                st.markdown(format_text(data.get('Content_Love')))
+                st.markdown(format_text(data.get('Content_Love')), unsafe_allow_html=True)
             with tab2:
                 st.markdown("### 事業與工作")
-                st.markdown(format_text(data.get('Content_Career')))
+                st.markdown(format_text(data.get('Content_Career')), unsafe_allow_html=True)
             with tab3:
                 st.markdown("### 財運與投資")
-                st.markdown(format_text(data.get('Content_Fortune')))
+                st.markdown(format_text(data.get('Content_Fortune')), unsafe_allow_html=True)
             with tab4: 
                 st.markdown("### 🏥 健康與平安")
-                st.markdown(format_text(data.get('Content_Health')))
+                st.markdown(format_text(data.get('Content_Health')), unsafe_allow_html=True)
             with tab5:
                 st.markdown("### 2026 流月運勢地圖")
-                st.markdown(format_text(data.get('Content_Monthly')))
+                st.markdown(format_text(data.get('Content_Monthly')), unsafe_allow_html=True)
             
             st.markdown("---")
             if st.button("🔄 重新測算 (輸入新生日需新序號)", use_container_width=True):
