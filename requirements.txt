@@ -1,3 +1,5 @@
 streamlit
 pandas
 lunar_python
+gspread
+oauth2client
