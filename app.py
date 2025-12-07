@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 import pandas as pd
 from lunar_python import Lunar, Solar
@@ -10,21 +8,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-# --- DEBUG 區塊 (測試完請刪除) ---
-if "gcp_service_account" in st.secrets:
-    keys = st.secrets["gcp_service_account"].keys()
-    if "private_key" not in keys:
-        st.error("❌ 嚴重錯誤：Secrets 裡面找不到 'private_key' 欄位！請檢查設定。")
-        st.write("目前讀到的欄位只有：", list(keys))
-    else:
-        st.success("✅ Secrets 設定正常，包含 private_key。")
-else:
-    st.error("❌ 嚴重錯誤：Secrets 裡完全找不到 [gcp_service_account] 區塊。")
-
-# -------------------------------
-
-
-# --- 1. 頁面設定 (這行一定要在最前面) ---
+# --- 1. 頁面設定 ---
 st.set_page_config(
     page_title="2026 丙午年・紫微斗數運勢詳批", 
     page_icon="🔮", 
@@ -111,7 +95,7 @@ def get_true_star_in_wu(year, month, day, hour_idx):
     except Exception:
         return "紫微"
 
-# --- 4. Google Sheets 連線 (包含自動修復 Key) ---
+# --- 4. Google Sheets 連線 (V16.0 強力修復版) ---
 
 def get_google_sheet_connection():
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
@@ -119,15 +103,29 @@ def get_google_sheet_connection():
     if os.path.exists("google_key.json"):
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
     else:
-        # 雲端模式：從 Secrets 讀取
-        # ⚠️ 這裡做了防呆處理：複製 Secrets 內容，以免修改到原始檔
+        # 從 Secrets 讀取
         key_dict = dict(st.secrets["gcp_service_account"])
         
-        # ⚠️ 自動修復 Private Key 的換行問題
-        # 如果 user 在 Secrets 裡直接貼上 \n 字串，Python 會把它當成兩個字元。
-        # 這裡強制把 "\\n" 替換成真正的換行符號 "\n"
+        # === V16.0 關鍵：金鑰格式強力修復 ===
         if "private_key" in key_dict:
-            key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+            pk = key_dict["private_key"]
+            
+            # 1. 處理換行符號：把字面上的 "\n" 轉為真正的換行
+            pk = pk.replace("\\n", "\n")
+            
+            # 2. 檢查並補上遺失的頭尾 (Header/Footer)
+            if "-----BEGIN PRIVATE KEY-----" not in pk:
+                pk = "-----BEGIN PRIVATE KEY-----\n" + pk
+            if "-----END PRIVATE KEY-----" not in pk:
+                pk = pk + "\n-----END PRIVATE KEY-----"
+                
+            # 3. 確保頭尾與內容之間有換行
+            # 這是最容易出錯的地方，我們用正則表達式強制整理
+            # 移除所有空白，只保留內容，然後重新組裝
+            # (這是一個比較激進但有效的重組法，如果上面兩步無效才啟用)
+            # 但為了保險，我們先只做上面的修正。
+            
+            key_dict["private_key"] = pk
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
         
@@ -158,7 +156,6 @@ def check_license_binding_cloud(license_key, user_birth_id):
             return False, "❌ 無效的序號，請確認輸入正確或前往購買。"
             
     except Exception as e:
-        # 如果還是連線失敗，會顯示具體錯誤
         return False, f"連線錯誤: {str(e)}"
 
 # --- 5. 文字排版 ---
