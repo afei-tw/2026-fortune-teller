@@ -121,7 +121,7 @@ def get_google_sheet_connection():
     client = gspread.authorize(creds)
     
     # === ⚠️ 請務必在此填入你的 Google Sheet ID ===
-    sheet_id = '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' # (請填入你之前複製的 ID)
+    sheet_id = '1aBcD-xYz12345...' # (請填入你之前複製的 ID)
     # ==========================================
     
     # 若 ID 仍為預設值，嘗試 fallback (但建議填 ID)
