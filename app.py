@@ -15,23 +15,42 @@ st.set_page_config(
     layout="centered"
 )
 
-# === 👇 新增這段 CSS 來隱藏 Streamlit 的預設介面 ===
+# === 👇 [關鍵更新] 強力隱藏介面的 CSS ===
 hide_streamlit_style = """
 <style>
-    /* 隱藏右上角漢堡選單 */
-    #MainMenu {visibility: hidden;}
-    /* 隱藏頁尾 "Made with Streamlit" */
-    footer {visibility: hidden;}
-    /* 隱藏頂部彩色橫條 */
-    header {visibility: hidden;}
-    /* 調整頂部空白，讓畫面更緊湊 */
+    /* 1. 隱藏上方 Header (包含漢堡選單、Running圖示) */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* 2. 隱藏右下角或右上角的 Toolbar (各種管理按鈕) */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    
+    /* 3. 隱藏特定的部署/管理按鈕 (你的紅色按鈕) */
+    .stAppDeployButton {
+        display: none !important;
+    }
+    
+    /* 4. 隱藏頁尾 "Made with Streamlit" */
+    footer {
+        display: none !important;
+    }
+    
+    /* 5. 調整頂部留白，讓畫面貼頂更自然 */
     .block-container {
         padding-top: 1rem !important; 
+    }
+    
+    /* 6. 針對嵌入模式的額外隱藏 (以防萬一) */
+    iframe[title="streamlitApp"] {
+        border: none;
     }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-# ===================================================
+# ==========================================
 
 # --- 2. 載入 CSV 資料 ---
 @st.cache_data
@@ -139,11 +158,10 @@ def get_google_sheet_connection():
     client = gspread.authorize(creds)
     
     # === ⚠️ 請務必在此填入你的 Google Sheet ID ===
-    sheet_id = '1aBcD-xYz12345...' # (請填入你之前複製的 ID)
+    sheet_id = '請將這裡替換成你的_Sheet_ID' 
     # ==========================================
     
-    # 若 ID 仍為預設值，嘗試 fallback (但建議填 ID)
-    if '1aBcD' in sheet_id: 
+    if '請將這裡替換成你的_Sheet_ID' in sheet_id: 
          return client.open("2026_Ledger").sheet1
     else:
          return client.open_by_key(sheet_id).sheet1
@@ -328,7 +346,6 @@ else:
                 
                 container.markdown("---")
                 
-                # [修正] 導購按鈕區塊 - 移除欄位限制，全寬顯示
                 st.link_button("💳 只需298元解鎖！前往取得序號", "https://afei-tw.com/product/2026-fortune-teller-ziwei/", type="secondary", use_container_width=True)
                 
                 container.caption("⚠️ 注意：序號一經使用即綁定此生日，無法轉讓給他人使用。")
