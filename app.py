@@ -15,6 +15,24 @@ st.set_page_config(
     layout="centered"
 )
 
+# === 👇 新增這段 CSS 來隱藏 Streamlit 的預設介面 ===
+hide_streamlit_style = """
+<style>
+    /* 隱藏右上角漢堡選單 */
+    #MainMenu {visibility: hidden;}
+    /* 隱藏頁尾 "Made with Streamlit" */
+    footer {visibility: hidden;}
+    /* 隱藏頂部彩色橫條 */
+    header {visibility: hidden;}
+    /* 調整頂部空白，讓畫面更緊湊 */
+    .block-container {
+        padding-top: 1rem !important; 
+    }
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# ===================================================
+
 # --- 2. 載入 CSV 資料 ---
 @st.cache_data
 def load_data():
