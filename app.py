@@ -308,7 +308,7 @@ else:
 
                 with st.container(border=True):
                     st.markdown("#### 🚀 立即解鎖完整報告")
-                    buy_link = "https://afei-tw.com/checkout/?add-to-cart=2026-fortune-teller-ziwei" 
+                    buy_link = "https://afei-tw.com/checkout/?add-to-cart=11110" 
                     st.link_button("💳 只需298元解鎖！前往取得序號", buy_link, type="primary", use_container_width=True)
                     st.markdown("---")
                     
