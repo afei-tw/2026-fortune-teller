@@ -15,42 +15,26 @@ st.set_page_config(
     layout="centered"
 )
 
-# === 👇 [關鍵更新] 強力隱藏介面的 CSS ===
+# 隱藏 Streamlit 原生介面 CSS
 hide_streamlit_style = """
 <style>
-    /* 1. 隱藏上方 Header (包含漢堡選單、Running圖示) */
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
+    header[data-testid="stHeader"] {display: none !important;}
+    [data-testid="stToolbar"] {display: none !important;}
+    .stAppDeployButton {display: none !important;}
+    footer {display: none !important;}
+    .block-container {padding-top: 1rem !important;}
     
-    /* 2. 隱藏右下角或右上角的 Toolbar (各種管理按鈕) */
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
-    
-    /* 3. 隱藏特定的部署/管理按鈕 (你的紅色按鈕) */
-    .stAppDeployButton {
-        display: none !important;
-    }
-    
-    /* 4. 隱藏頁尾 "Made with Streamlit" */
-    footer {
-        display: none !important;
-    }
-    
-    /* 5. 調整頂部留白，讓畫面貼頂更自然 */
-    .block-container {
-        padding-top: 1rem !important; 
-    }
-    
-    /* 6. 針對嵌入模式的額外隱藏 (以防萬一) */
-    iframe[title="streamlitApp"] {
-        border: none;
+    .locked-box {
+        background-color: #f0f2f6;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        border: 2px dashed #a1a1a1;
+        margin: 20px 0;
     }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-# ==========================================
 
 # --- 2. 載入 CSV 資料 ---
 @st.cache_data
@@ -135,10 +119,7 @@ def get_true_star_in_wu(year, month, day, hour_idx):
 # --- 4. Google Sheets 連線 ---
 
 def get_google_sheet_connection():
-    scope = [
-        'https://spreadsheets.google.com/feeds',
-        'https://www.googleapis.com/auth/drive'
-    ]
+    scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
     
     if os.path.exists("google_key.json"):
         creds = ServiceAccountCredentials.from_json_keyfile_name('google_key.json', scope)
@@ -152,16 +133,15 @@ def get_google_sheet_connection():
             if "-----END PRIVATE KEY-----" not in pk:
                 pk = pk + "\n-----END PRIVATE KEY-----"
             key_dict["private_key"] = pk
-
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
-        
+    
     client = gspread.authorize(creds)
     
-    # === ⚠️ 請務必在此填入你的 Google Sheet ID ===
-    sheet_id = '請將這裡替換成你的_Sheet_ID' 
-    # ==========================================
+    # === ⚠️ 請在此填入 Google Sheet ID ===
+    sheet_id = '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' 
+    # ==================================
     
-    if '請將這裡替換成你的_Sheet_ID' in sheet_id: 
+    if '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' in sheet_id:
          return client.open("2026_Ledger").sheet1
     else:
          return client.open_by_key(sheet_id).sheet1
@@ -170,57 +150,66 @@ def check_license_binding_cloud(license_key, user_birth_id):
     try:
         sheet = get_google_sheet_connection()
         records = sheet.get_all_records()
-        
         ledger = {}
         for row in records:
-            k = str(row.get('license_key', row.get('License_Key', ''))).strip()
-            v = str(row.get('user_birth_id', '')).strip()
-            if k:
-                ledger[k] = v
+            # 寬容模式：不管欄位是 license_key 還是 License_Key 都抓
+            k = None
+            for key in row.keys():
+                if str(key).strip().lower() == "license_key":
+                    k = str(row[key]).strip()
+                    break
+            
+            # 抓取 user_birth_id
+            v = ""
+            for key in row.keys():
+                if str(key).strip().lower() == "user_birth_id":
+                    v = str(row[key]).strip()
+                    break
+                    
+            if k: ledger[k] = v
         
         input_key = str(license_key).strip()
 
         if input_key in ledger:
             saved_id = ledger[input_key]
+            if saved_id is None: saved_id = ""
+
+            # 情況1：序號是新的 (saved_id 為空)
+            if saved_id == "":
+                if user_birth_id and user_birth_id != "":
+                    # 有生日資料 -> 執行綁定
+                    cell = sheet.find(input_key)
+                    sheet.update_cell(cell.row, 2, user_birth_id)
+                    sheet.update_cell(cell.row, 3, str(datetime.now()))
+                    return True, "✅ 序號綁定成功！"
+                else:
+                    # 沒生日資料 -> 回傳有效但未綁定
+                    return True, "WAIT_FOR_BIRTH" 
             
-            if not saved_id or saved_id == "":
-                cell = sheet.find(input_key)
-                sheet.update_cell(cell.row, 2, user_birth_id)
-                sheet.update_cell(cell.row, 3, str(datetime.now()))
-                return True, "✅ 序號首次啟用成功！"
-            
+            # 情況2：序號已綁定，檢查是否吻合
             elif saved_id == user_birth_id:
                 return True, "歡迎回來！驗證成功。"
-            
             else:
-                return False, "❌ 此序號已綁定其他生日，無法用於此命盤。"
+                return False, f"❌ 此序號已綁定其他生日 ({saved_id})，無法使用。"
         else:
             return False, f"❌ 無效的序號 ({input_key})，未在資料庫中找到。"
-            
     except Exception as e:
         return False, f"連線錯誤: {str(e)}"
 
 # --- 5. 文字排版 ---
 def format_text(text):
-    if pd.isna(text): return "（此欄位無資料）"
+    if pd.isna(text): return ""
     text = str(text)
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
     text = text.replace("\n", "<br>") 
-    if "✓" in text:
-        text = text.replace("✓", "<br><br>✓ ")
     return text
 
 def show_footer():
     st.markdown("---")
     st.markdown(
-        """
-        <div style="text-align: center; color: #888888; font-size: 0.9em; line-height: 1.8;">
-            本測算系統由 <a href="https://afei-tw.com/" target="_blank" style="color: #FF4B4B; text-decoration: none; font-weight: bold;">阿飛．不會飛</a> 提供<br>
-            <span style="font-size: 0.8em;">🔒 隱私聲明：本系統不會永久儲存您的個資，請安心使用。</span>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+        """<div style="text-align: center; color: #888888; font-size: 0.9em;">
+            本測算系統由 <a href="https://afei-tw.com/" target="_blank" style="color:#FF4B4B;text-decoration:none;">阿飛．不會飛</a> 提供
+        </div>""", unsafe_allow_html=True)
 
 # --- 6. 主程式介面 ---
 
@@ -231,74 +220,67 @@ if "unlocked" not in st.session_state:
 if "user_birth_id" not in st.session_state:
     st.session_state.user_birth_id = ""
 
-# === 狀態 A: 首頁 ===
+# 自動抓取網址參數
+query_params = st.query_params
+auto_license_key = query_params.get("license_key", None)
+
+# === 狀態 A: 輸入資料頁 ===
 if not st.session_state.calculated:
     st.title("2026 丙午年・紫微斗數運勢詳批")
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
     
-    st.markdown("""
-    ### 🐎 2026 火馬奔騰，您的運勢準備好了嗎？
-    
-    2026年是天干地支皆屬火的「**丙午年**」，又被稱為「**火馬年**」。
-    這意味著整體大環境將充滿**變動、爆發與蛻變**的能量。
-    
-    運勢強時如何乘勢而為？運勢弱時如何持盈保泰？
-    這將是您在充滿變革的火馬年中，掌握先機的重要關鍵。
-    
-    ---
-    
-    #### 【本流年測算特色】
-    
-    ✅ **全方位解析** 針對財運、事業、感情、健康四大運勢，提供具體建議。
-
-    ✅ **個人化命盤** 不講空泛的大道理，只針對您的命盤給出解方。
-
-    ✅ **關鍵月份提醒** 告訴您哪個月該衝、哪個月該守，精準掌握運勢起伏。
-
-    ---
-    """, unsafe_allow_html=True)
-    
-    st.success("👇 **請在此輸入您的出生資料，立即開啟流年卷軸**")
+    if auto_license_key:
+        st.success(f"🎉 系統已偵測到付款序號：{auto_license_key}")
+        st.info("👇 請輸入您的出生資料，點擊「開始分析」後將自動完成解鎖。")
+    else:
+        st.info("👇 請輸入出生資料，免費預覽您的 2026 運勢格局")
     
     with st.container(border=True):
         col1, col2 = st.columns(2)
-        with col1:
-            b_year = st.number_input("出生年 (西元)", 1940, 2025, 1990)
-        with col2:
-            b_month = st.selectbox("出生月", range(1, 13), index=5)
+        with col1: b_year = st.number_input("出生年 (西元)", 1940, 2025, 1990)
+        with col2: b_month = st.selectbox("出生月", range(1, 13), index=5)
         col3, col4 = st.columns(2)
-        with col3:
-            b_day = st.selectbox("出生日", range(1, 32), index=14)
+        with col3: b_day = st.selectbox("出生日", range(1, 32), index=14)
         with col4:
-            hours_map = {
-                "子 (23-01)": 0, "丑 (01-03)": 1, "寅 (03-05)": 2, "卯 (05-07)": 3,
-                "辰 (07-09)": 4, "巳 (09-11)": 5, "午 (11-13)": 6, "未 (13-15)": 7,
-                "申 (15-17)": 8, "酉 (17-19)": 9, "戌 (19-21)": 10, "亥 (21-23)": 11
-            }
+            hours_map = {"子 (23-01)":0,"丑 (01-03)":1,"寅 (03-05)":2,"卯 (05-07)":3,"辰 (07-09)":4,"巳 (09-11)":5,"午 (11-13)":6,"未 (13-15)":7,"申 (15-17)":8,"酉 (17-19)":9,"戌 (19-21)":10,"亥 (21-23)":11}
             b_hour_str = st.selectbox("出生時辰", list(hours_map.keys()), index=6)
             b_hour = hours_map[b_hour_str]
 
-        if st.button("🔥 開始排盤測算", type="primary", use_container_width=True):
+        # === 關鍵修改：按鈕按下時，立刻處理綁定 ===
+        if st.button("🔥 開始分析運勢", type="primary", use_container_width=True):
+            user_birth_id = f"{b_year}-{b_month}-{b_day}-{b_hour}"
             st.session_state.b_year = b_year
             st.session_state.b_month = b_month
             st.session_state.b_day = b_day
             st.session_state.b_hour = b_hour
-            st.session_state.user_birth_id = f"{b_year}-{b_month}-{b_day}-{b_hour}"
+            st.session_state.user_birth_id = user_birth_id
             st.session_state.calculated = True
-            st.session_state.unlocked = False 
+            
+            # 如果網址有帶序號，這裡直接進行驗證與綁定
+            if auto_license_key:
+                with st.spinner("正在自動綁定序號..."):
+                    is_valid, msg = check_license_binding_cloud(auto_license_key, user_birth_id)
+                if is_valid:
+                    st.session_state.unlocked = True
+                else:
+                    st.session_state.auth_error = msg # 暫存錯誤訊息到下一頁顯示
+
             st.rerun()
     
     show_footer()
 
-# === 狀態 B: 結果頁 ===
+# === 狀態 B: 結果展示頁 ===
 else:
     if df_fortune is None:
-        st.error("❌ 系統錯誤：找不到資料庫檔案 `2026_data.csv`。")
-        if st.button("返回首頁"):
-            st.session_state.calculated = False
-            st.rerun()
+        st.error("❌ 系統錯誤：找不到資料庫檔案。")
     else:
+        # 如果上一頁驗證失敗，這裡顯示錯誤
+        if "auth_error" in st.session_state and st.session_state.auth_error:
+            st.error(st.session_state.auth_error)
+            # 清除錯誤以免一直顯示
+            del st.session_state.auth_error
+
         b_year = st.session_state.b_year
         b_month = st.session_state.b_month
         b_day = st.session_state.b_day
@@ -307,88 +289,73 @@ else:
 
         star_name = get_true_star_in_wu(b_year, b_month, b_day, b_hour)
         res = df_fortune[df_fortune['Star_ID'] == star_name]
-        
         if res.empty and "+" in star_name:
             p1 = star_name.split("+")[0]
             res = df_fortune[df_fortune['Star_ID'] == p1]
-            if not res.empty:
-                st.caption(f"💡 您的格局為【{star_name}】，顯示主星【{p1}】運勢。")
 
         if not res.empty:
             data = res.iloc[0]
             
-            st.title("2026 丙午年・紫微斗數運勢詳批")
-            st.markdown(f"### 您的流年命宮主星：【{star_name}】")
+            st.title("2026 流年運勢分析報告")
+            st.success(f"您的流年命宮主星：【{star_name}】")
+            c1, c2 = st.columns([1,2])
+            with c1: st.metric("年度運勢評分", f"{data['Score']} 分")
+            with c2: st.info(f"✨ 年度金句：{data['Summary']}")
             
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                st.metric("年度運勢評分", f"{data['Score']} 分")
-            with col2:
-                st.markdown("##### ✨ 你的年度金句") 
-                st.info(f"{data['Summary']}")
-                
-            st.divider()
-            st.subheader(f"📜 {data['Title']}")
+            st.markdown("### 📜 年度總運勢 (免費試閱)")
             st.markdown(format_text(data['Content_General']), unsafe_allow_html=True)
             st.divider()
-            
+
             if not st.session_state.unlocked:
-                container = st.container(border=True)
-                container.markdown("### 🔒 解鎖完整流年報告")
-                container.write("付費解鎖後，您將看到以下詳細內容：")
-                
-                c1, c2, c3, c4, c5 = container.columns(5)
-                c1.markdown("❤️ **感情運**")
-                c2.markdown("💼 **事業運**")
-                c3.markdown("💰 **財運**")
-                c4.markdown("🏥 **健康運**") 
-                c5.markdown("📅 **流月運**")
-                
-                container.markdown("---")
-                
-                st.link_button("💳 只需298元解鎖！前往取得序號", "https://afei-tw.com/product/2026-fortune-teller-ziwei/", type="secondary", use_container_width=True)
-                
-                container.caption("⚠️ 注意：序號一經使用即綁定此生日，無法轉讓給他人使用。")
-                col_input, col_btn = container.columns([3, 1])
-                input_key = col_input.text_input("請輸入解鎖序號", placeholder="例如: 2026-XXXX-XXXX", label_visibility="collapsed")
-                
-                if col_btn.button("立即解鎖", type="primary"):
-                    with st.spinner("正在連線資料庫驗證..."):
-                        is_valid, msg = check_license_binding_cloud(input_key, user_birth_id)
+                st.markdown(
+                    """
+                    <div class="locked-box">
+                        <h3>🔒 進階運勢報告已鎖定</h3>
+                        <p style="color: #666;">付費解鎖後，獲得完整流年詳批...</p>
+                    </div>
+                    """, unsafe_allow_html=True
+                )
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("❌ **感情運勢** (隱藏)")
+                    st.markdown("❌ **事業發展** (隱藏)")
+                with col2:
+                    st.markdown("❌ **財運分析** (隱藏)")
+                    st.markdown("❌ **流月運勢** (隱藏)")
+                st.write("") 
+
+                with st.container(border=True):
+                    st.markdown("#### 🚀 立即解鎖完整報告")
+                    buy_link = "https://afei-tw.com/checkout/?add-to-cart=11110" 
+                    st.link_button("💳 只需298元解鎖！前往取得序號", buy_link, type="primary", use_container_width=True)
+                    st.markdown("---")
                     
-                    if is_valid:
-                        st.session_state.unlocked = True
-                        st.rerun()
-                    else:
-                        container.error(msg)
+                    st.caption("已有序號？請在下方輸入：")
+                    c_input, c_btn = st.columns([3,1])
+                    default_key = auto_license_key if auto_license_key else ""
+                    input_key = c_input.text_input("License Key", value=default_key, placeholder="例如: 2026-XXXX-XXXX", label_visibility="collapsed")
+                    
+                    if c_btn.button("解鎖", type="secondary"):
+                        with st.spinner("驗證中..."):
+                            is_valid, msg = check_license_binding_cloud(input_key, user_birth_id)
+                        if is_valid:
+                            st.session_state.unlocked = True
+                            st.rerun()
+                        else:
+                            st.error(msg)
             else:
-                st.success("🎉 已解鎖完整報告！建議您截圖保存。")
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情運", "💼 事業運", "💰 財運", "🏥 健康運", "📅 流月運勢"])
-                
-                with tab1:
-                    st.markdown("### 感情與人際")
-                    st.markdown(format_text(data.get('Content_Love')), unsafe_allow_html=True)
-                with tab2:
-                    st.markdown("### 事業與工作")
-                    st.markdown(format_text(data.get('Content_Career')), unsafe_allow_html=True)
-                with tab3:
-                    st.markdown("### 財運與投資")
-                    st.markdown(format_text(data.get('Content_Fortune')), unsafe_allow_html=True)
-                with tab4: 
-                    st.markdown("### 🏥 健康與平安")
-                    st.markdown(format_text(data.get('Content_Health')), unsafe_allow_html=True)
-                with tab5:
-                    st.markdown("### 2026 流月運勢地圖")
-                    st.markdown(format_text(data.get('Content_Monthly')), unsafe_allow_html=True)
-                
+                st.balloons()
+                st.success("🎉 報告已完整解鎖！")
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["💘 感情", "💼 事業", "💰 財運", "🏥 健康", "📅 流月"])
+                with tab1: st.markdown(format_text(data.get('Content_Love')), unsafe_allow_html=True)
+                with tab2: st.markdown(format_text(data.get('Content_Career')), unsafe_allow_html=True)
+                with tab3: st.markdown(format_text(data.get('Content_Fortune')), unsafe_allow_html=True)
+                with tab4: st.markdown(format_text(data.get('Content_Health')), unsafe_allow_html=True)
+                with tab5: st.markdown(format_text(data.get('Content_Monthly')), unsafe_allow_html=True)
                 st.markdown("---")
-                if st.button("🔄 重新測算 (輸入新生日需新序號)", use_container_width=True):
+                if st.button("🔄 重新測算"):
                     st.session_state.calculated = False
                     st.session_state.unlocked = False
                     st.rerun()
-            show_footer()
-        else:
-            st.error(f"資料庫中找不到【{star_name}】的資料。")
-            if st.button("返回首頁"):
-                st.session_state.calculated = False
-                st.rerun()
+
+    show_footer()
