@@ -32,6 +32,17 @@ hide_streamlit_style = """
         border: 2px dashed #a1a1a1;
         margin: 20px 0;
     }
+    
+    /* 除錯訊息樣式 */
+    .debug-box {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        font-size: 0.8em;
+    }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -141,7 +152,7 @@ def get_google_sheet_connection():
     sheet_id = '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' 
     # ==================================
     
-    if '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0' in sheet_id:
+    if '1CTm-U3IsDy-Z-oc5eVWY__G22XStDV7BvSQ5bhIDCu0:
          return client.open("2026_Ledger").sheet1
     else:
          return client.open_by_key(sheet_id).sheet1
@@ -157,23 +168,27 @@ def check_license_binding_cloud(license_key, user_birth_id):
             if k: ledger[k] = v
         
         input_key = str(license_key).strip()
+
         if input_key in ledger:
             saved_id = ledger[input_key]
-            if not saved_id or saved_id == "":
-                # 只有當 user_birth_id 真的有值時才進行綁定
+            
+            # 這裡增加一個判斷：如果 ID 是 None，視為空字串
+            if saved_id is None: saved_id = ""
+
+            if saved_id == "":
                 if user_birth_id and user_birth_id != "":
                     cell = sheet.find(input_key)
                     sheet.update_cell(cell.row, 2, user_birth_id)
                     sheet.update_cell(cell.row, 3, str(datetime.now()))
                     return True, "✅ 序號首次啟用成功！"
                 else:
-                    return True, "⏳ 序號有效！請點擊下方按鈕綁定生日。" # 特殊狀態：有望遠鏡但還沒綁定
+                    return True, "⏳ 序號有效！請點擊下方按鈕綁定生日。"
             elif saved_id == user_birth_id:
                 return True, "歡迎回來！驗證成功。"
             else:
-                return False, "❌ 此序號已被其他生日綁定，無法使用。"
+                return False, f"❌ 此序號已綁定其他生日 ({saved_id})，無法使用。"
         else:
-            return False, "❌ 無效的序號。"
+            return False, f"❌ 無效的序號 ({input_key})，未在資料庫中找到。"
     except Exception as e:
         return False, f"連線錯誤: {str(e)}"
 
@@ -201,10 +216,19 @@ if "unlocked" not in st.session_state:
 if "user_birth_id" not in st.session_state:
     st.session_state.user_birth_id = ""
 
-# [新增] 自動抓取網址參數 (Auto-Detect URL Params)
-# 這段代碼會去抓 ?license_key=xxxx
+# 自動抓取網址參數
 query_params = st.query_params
 auto_license_key = query_params.get("license_key", None)
+
+# === 🛠️ 除錯訊息區塊 (正式上線可移除) ===
+if auto_license_key:
+    st.markdown(f"""
+    <div class="debug-box">
+        🛠️ [除錯模式] 偵測到網址參數<br>
+        接收到的序號: <b>{auto_license_key}</b>
+    </div>
+    """, unsafe_allow_html=True)
+# ====================================
 
 # === 狀態 A: 輸入資料頁 ===
 if not st.session_state.calculated:
@@ -212,7 +236,6 @@ if not st.session_state.calculated:
     if os.path.exists("banner.jpg"):
         st.image("banner.jpg", use_container_width=True)
     
-    # [新增] 如果網址帶有序號，顯示歡迎訊息
     if auto_license_key:
         st.success("🎉 付款成功！系統已自動帶入您的解鎖序號，請輸入生日以完成綁定。")
     else:
@@ -236,12 +259,6 @@ if not st.session_state.calculated:
             st.session_state.b_hour = b_hour
             st.session_state.user_birth_id = f"{b_year}-{b_month}-{b_day}-{b_hour}"
             st.session_state.calculated = True
-            
-            # [新增] 如果有自動序號，直接在這裡嘗試解鎖
-            if auto_license_key:
-                # 這裡只要先進入結果頁，結果頁會自動處理驗證
-                pass 
-            
             st.rerun()
     show_footer()
 
@@ -265,18 +282,19 @@ else:
         if not res.empty:
             data = res.iloc[0]
             
-            # --- [新增] 自動解鎖邏輯 ---
-            # 如果還沒解鎖，但網址有序號，則自動執行一次驗證
+            # --- 自動解鎖邏輯 (含除錯訊息) ---
             if not st.session_state.unlocked and auto_license_key:
-                with st.spinner("正在為您自動啟用完整報告..."):
+                st.info(f"🔄 正在嘗試自動驗證序號：{auto_license_key} ...")
+                with st.spinner("資料庫連線中..."):
                     is_valid, msg = check_license_binding_cloud(auto_license_key, user_birth_id)
+                
                 if is_valid:
                     st.session_state.unlocked = True
-                    st.toast("✅ 自動解鎖成功！", icon="🎉")
-                    # 不用 rerun，直接往下跑就會顯示解鎖內容
+                    st.success("✅ 驗證通過！已解鎖報告。")
+                    st.rerun()
                 else:
-                    st.error(msg)
-            # ------------------------
+                    st.error(f"⚠️ 自動驗證失敗：{msg}")
+            # -------------------------------
 
             st.title("2026 流年運勢分析報告")
             st.success(f"您的流年命宮主星：【{star_name}】")
@@ -293,7 +311,7 @@ else:
                     """
                     <div class="locked-box">
                         <h3>🔒 進階運勢報告已鎖定</h3>
-                        <p style="color: #666;">付費解鎖後，您將獲得完整流年詳批...</p>
+                        <p style="color: #666;">付費解鎖後，您將獲得 5000 字完整流年詳批...</p>
                     </div>
                     """, unsafe_allow_html=True
                 )
@@ -308,13 +326,12 @@ else:
 
                 with st.container(border=True):
                     st.markdown("#### 🚀 立即解鎖完整報告")
-                    buy_link = "https://afei-tw.com/checkout/?add-to-cart=11110" 
+                    buy_link = "https://afei-tw.com/checkout/?add-to-cart=你的商品ID" 
                     st.link_button("💳 只需298元解鎖！前往取得序號", buy_link, type="primary", use_container_width=True)
                     st.markdown("---")
                     
                     st.caption("已有序號？請在下方輸入：")
                     c_input, c_btn = st.columns([3,1])
-                    # 如果有自動序號但驗證失敗(例如已綁定別人)，至少把它填在格子裡方便修改
                     default_key = auto_license_key if auto_license_key else ""
                     input_key = c_input.text_input("License Key", value=default_key, placeholder="例如: 2026-XXXX-XXXX", label_visibility="collapsed")
                     
